@@ -5,6 +5,7 @@
 #include <iostream>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 // declare namespace for std
 using namespace std;
 
@@ -23,66 +24,102 @@ public:
 	}
 };
 
-// class for utilizing multi threaded counter
-class ThreadedCounter {
-	// declare mutex
-	mutex mu;
-private:
-	// private variables
-	int counter, count;
-public:
-	// constructor to set private variables
-	ThreadedCounter(int& n, int& countTo) : counter(n), count(countTo){}
+//class ThreadedCounter {
+//	mutex mu;
+//	condition_variable cond;
+//	bool loaded;
+//private: int counter, count;
+//public:
+//	ThreadedCounter(int &n, int &countTo) : counter(n), count(countTo) {
+//		loaded = false;
+//	}
+//	// function to be threaded, takes in ThreadedCounter object, increments the counter
+//	void incrementCounter(){
+//		lock_guard<mutex> lockGuard(mu);
+//		int n = 0;
+//		while (n <= 1000){
+//			cout << "from th1: " << n << endl;
+//			n++;
+//		}
+//		loaded = true;
+//		cond.notify_one();
+//	}
+//	// function to be threaded, takes in ThreadedCounter object, decrements the counter
+//	void decrementCounter(){
+//		int n = 1000;
+//		this_thread::sleep_for(chrono::milliseconds(1000));
+//		unique_lock<mutex> mlock(mu);
+//		cond.wait(mlock, bind(&ThreadedCounter::incrementCounter, this));
+//		while (n >= 0){
+//			if (n < 1000) cout << "from th2: " << n << endl;
+//			n--;
+//		}
+//	}
+//};
 
-	// getter for the counter and what to count up to
-	int getCounter() {return counter;}
-	int getCount() {return count;}
-	// setter for the value of the counter
-	void setCounter(int n){counter = n;}
+//class ThreadedCounter {
+//	mutex mu;
+//public:
+//	ThreadedCounter(){}
+//	void sharedPrint(string msg, int n){
+//		lock_guard<mutex> lockGuard(mu);
+//		cout << msg << n << endl;
+//	}
+//};
+mutex mu;
+int i = 0;
+condition_variable cond;
 
-	// function with mutex protection to guard against race conditions regarding shared variables
-	void printer(string msg, int counter){
-		lock_guard<mutex> lockGuard(mu);
-		// print out message to console with counter
-		cout << msg << counter << endl;
+
+void incrementCounter() {
+	int count = 10000;
+	lock_guard<mutex> lockGuard(mu);
+	while (i < count){
+		cout << "from th1: " << i << endl;
+		i++;
 	}
-};
-
-// function to be threaded, takes in ThreadedCounter object, increments the counter
-void incrementCounter(ThreadedCounter& th){
-	// while counter is < target value, increment the counter
-	while(th.getCounter() <= th.getCount()){ // starts as 0 <= 20
-		// print to cout the value of the counter
-		th.printer(string("from th1: "), th.getCounter());
-		// increment the counter by 1
-		th.setCounter(th.getCounter()+1);
-	}
+	cond.notify_one();
 }
 
-// function to be threaded, takes in ThreadedCounter object, decrements the counter
-void decrementCounter(ThreadedCounter& th){
-	// while counter is above 0, decrement the counter until it hits 0
-	while(th.getCounter() >= 0){ // initially starts as 21 >= 0
-		// if the counter is less than the target value, print to cout value of the counter
-		if (th.getCounter() < th.getCount()) th.printer(string("from th2: "), th.getCounter());
-		// decrement the counter by 1
-		th.setCounter(th.getCounter()-1);
+void decrementCounter() {
+	int count = 0;
+	unique_lock<mutex> locker(mu);
+	cond.wait(locker, []{return (i != 0) ? true: false;});
+	while (i >= count) {
+		cout << "from th2: " << i << endl;
+		i--;
 	}
+//	int i = 1000;
+//	int count = 0;
+//
+//	while (i >= count) {
+//		unique_lock<mutex> locker(mu);
+//		cond.wait(locker, [](){return i != 0;});
+//		cout << "from th2: " << i <<endl;
+//		i--;
+//		locker.unlock();
+//
+//	}
 }
+
 
 
 int main() {
+//	ThreadedCounter counter;
 	// set target value for counter to reach
-	int countTo = 20;
+//	int countTo = 1000;
 	// set value of the counter to be 0
-	int i = 0;
-	// create new class of ThreadedCounter with parameterized constructor
-	ThreadedCounter counter(i, countTo);
-	// create two threads with reference to the ThreadedCounter object
+//	int i = 0;
+//	ThreadedCounter counter(i, countTo);
 	try {
-		thread th1(incrementCounter, ref(counter));
-		thread th2(decrementCounter, ref(counter));
-		// utilize wrapper class to make sure threads are opened and closed properly
+//		thread th1(incrementCounter, ref(i), ref(countTo));
+//		thread th2(decrementCounter, ref(i), ref(countTo));
+//		thread th1(&ThreadedCounter::incrementCounter, ref(counter));
+//		thread th2(&ThreadedCounter::decrementCounter, ref(counter));
+		thread th1(incrementCounter);
+		thread th2(decrementCounter);
+//		th1.join();
+//		th2.join();
 		ThreadRAII wrapperThread1(th1);
 		ThreadRAII wrapperThread2(th2);
 	} catch (...) {
